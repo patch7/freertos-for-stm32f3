@@ -1,3 +1,5 @@
 /Debug/
 /STM32F30x_StdPeriph_Driver/
 /CMSIS/
+/freertos for stm32f3.wsdt
+*.dep
