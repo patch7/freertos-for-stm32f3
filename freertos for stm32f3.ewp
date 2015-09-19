@@ -711,11 +711,11 @@
         </option>
         <option>
           <name>IlinkIcfOverride</name>
-          <state>0</state>
+          <state>1</state>
         </option>
         <option>
           <name>IlinkIcfFile</name>
-          <state>$TOOLKIT_DIR$\config\linker\ST\stm32f303xC.icf</state>
+          <state>$PROJ_DIR$\freertos for stm32f3.icf</state>
         </option>
         <option>
           <name>IlinkIcfFileSlave</name>
