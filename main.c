@@ -8,6 +8,8 @@
 #include "task.h"
 #include "queue.h"
 
+uint32_t cnt1=0, cnt2=0;
+
 void vFreeRTOSInitGPIO()//on of leds
 {
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOE, ENABLE);
@@ -22,47 +24,44 @@ void vFreeRTOSInitGPIO()//on of leds
 }
 
 void vFreeRTOSInitTIM()
-{
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1, ENABLE);
+{ /* TIM2 clock enable */
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+  /* GPIOA clock enable */
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+  /* TIM2 chennel2 configuration : PA.01 */
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin   = GPIO_Pin_1;
+  GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP ;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  /* Connect TIM pin to AF1 */
+  GPIO_PinAFConfig(GPIOA, GPIO_PinSource1, GPIO_AF_1);
+  /* Enable the TIM2 global Interrupt */
+  NVIC_InitTypeDef NVIC_InitStructure;
+  NVIC_InitStructure.NVIC_IRQChannel = TIM2_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
 
-	GPIO_InitTypeDef GPIO_InitStructure;
-	GPIO_InitStructure.GPIO_Pin   = GPIO_Pin_9;
-	GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-	GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_NOPULL;
-	GPIO_Init(GPIOE, &GPIO_InitStructure);
+  TIM_ICInitTypeDef  TIM_ICInitStructure;
+	TIM_ICInitStructure.TIM_Channel = TIM_Channel_2;
+  TIM_ICInitStructure.TIM_ICPolarity = TIM_ICPolarity_Rising;
+  TIM_ICInitStructure.TIM_ICSelection = TIM_ICSelection_DirectTI;
+  TIM_ICInitStructure.TIM_ICPrescaler = TIM_ICPSC_DIV1;
+  TIM_ICInitStructure.TIM_ICFilter = 0x0;
 
-	TIM_TimeBaseInitTypeDef timer_base;
-  TIM_TimeBaseStructInit(&timer_base);
-  timer_base.TIM_Prescaler = 72; // частота 72МГц, поэтому один тик таймера - 1мкс
-  TIM_TimeBaseInit(TIM1, &timer_base);
-
-  TIM_ICInitTypeDef TIM_ICStructure;
-  TIM_ICStructure.TIM_Channel = TIM_Channel_1; // первый канал
-  TIM_ICStructure.TIM_ICPolarity = TIM_ICPolarity_Falling; // по заднему фронту
-  TIM_ICStructure.TIM_ICSelection = TIM_ICSelection_DirectTI; // прямо с ножки
-  TIM_ICStructure.TIM_ICPrescaler = TIM_ICPSC_DIV1; // без делителя
-  TIM_ICStructure.TIM_ICFilter = 0; // без фильтра
-
-  // эта функция и включает режим PWM input - автоматически настраивает комплементарный канал
-  // правда в стандартной библиотеке работает на 1 и 2 канале, на 3 и 4 - не умеет
-  TIM_PWMIConfig(TIM1, &TIM_ICStructure);
-
-  /* Выбираем источник для триггера: вход 1 */
-  TIM_SelectInputTrigger(TIM1, TIM_TS_TI1FP1);
-  /* По событию от триггера счётчик будет сбрасываться. */
-  TIM_SelectSlaveMode(TIM1, TIM_SlaveMode_Reset);
-  /* Включаем события от триггера */
-  TIM_SelectMasterSlaveMode(TIM1, TIM_MasterSlaveMode_Enable);
-
-  /* Разрешаем таймеру генерировать прерывание по захвату */
-  TIM_ITConfig(TIM1, TIM_IT_CC1, ENABLE);
-  TIM_ClearFlag(TIM1, TIM_FLAG_CC1);
-  /* Включаем таймер */
-  TIM_Cmd(TIM1, ENABLE);
-  // разрешаем прерывания
-  NVIC_EnableIRQ(TIM1_CC_IRQn);
+  TIM_PWMIConfig(TIM2, &TIM_ICInitStructure);
+  /* Select the TIM2 Input Trigger: TI2FP2 */
+  TIM_SelectInputTrigger(TIM2, TIM_TS_TI2FP2);
+  /* Select the slave Mode: Reset Mode */
+  TIM_SelectSlaveMode(TIM2, TIM_SlaveMode_Reset);
+  TIM_SelectMasterSlaveMode(TIM2,TIM_MasterSlaveMode_Enable);
+  /* TIM enable counter */
+  TIM_Cmd(TIM2, ENABLE);
+  /* Enable the CC2 Interrupt Request */
+  TIM_ITConfig(TIM2, TIM_IT_CC2, ENABLE);
 }
 
 void vLedTask(void *pvParameters)//flash of leds
@@ -70,7 +69,8 @@ void vLedTask(void *pvParameters)//flash of leds
 	while(1)
 	{
 		GPIOE->ODR ^= GPIO_Pin_8;
-		vTaskDelay(50);
+		vTaskDelay(1000);
+    GPIO_ResetBits(GPIOE, GPIO_Pin_10);
 	}
   vTaskDelete(NULL);
 }
@@ -84,18 +84,14 @@ int main()
   return 0;
 }
 
-void TIM1_IRQHandler()
+void TIM2_IRQHandler()
 {
-  uint16_t cnt1, cnt2;
-  if (TIM_GetITStatus(TIM1, TIM_IT_CC1) != RESET)
-  {
-  	GPIO_SetBits(GPIOE, GPIO_Pin_10);
-    TIM_ClearITPendingBit(TIM1, TIM_IT_CC1);
-    TIM_ClearITPendingBit(TIM1, TIM_IT_Update);
+  GPIO_SetBits(GPIOE, GPIO_Pin_10);
+  TIM_ClearITPendingBit(TIM2, TIM_IT_CC1);
+  TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
 
-    cnt1 = TIM_GetCapture1(TIM1);
-    cnt2 = TIM_GetCapture2(TIM1);
-  }
+  cnt1 = TIM_GetCapture1(TIM2);
+  cnt2 = TIM_GetCapture2(TIM2);
 }
 
 void vApplicationIdleHook(void) {}
